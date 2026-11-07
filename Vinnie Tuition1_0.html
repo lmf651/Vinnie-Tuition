@@ -1,0 +1,2151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>維尼全腦團班收費系統1.0</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- SortableJS for smooth Touch & Mouse Drag-and-Drop on specific handle -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@500;700;900&display=swap');
+
+    :root {
+      /* 嚴格鎖定左側學校欄 33.33vw (1/3)，右側月份區 66.67vw (2/3)，每個月份欄 22.22vw (剛好顯示3個月) */
+      --school-col-w: 33.3333vw;
+      --month-col-w: 22.2222vw;
+      --total-col-w: 24vw;
+    }
+
+    @media (min-width: 768px) {
+      :root {
+        --school-col-w: 33.3333vw;
+        --month-col-w: 11.1111vw;
+        --total-col-w: 13vw;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+      font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+
+    /* 僅鎖定表格與按鈕區不誤觸反白，徹底釋放圖片的長按儲存選單 */
+    .app-shell {
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    /* 整體滿版直立式固定容器，防止任何底部塌陷與溢位 */
+    .app-shell {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100dvh;
+      overflow: hidden;
+      background-color: #f1f5f9;
+    }
+
+    /* ===== 3秒淺藍開機載入畫面 (Splash Screen) ===== */
+    #splash-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      background: linear-gradient(180deg, #eff6ff 0%, #e0f2fe 55%, #dbeafe 100%);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 20px 24px 28px 24px;
+      transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1), transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    #splash-screen.splash-hidden {
+      opacity: 0;
+      transform: scale(1.04);
+      pointer-events: none;
+    }
+    @keyframes floatSlow {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-6px); }
+    }
+    @keyframes beeFly {
+      0%, 100% { transform: translate(0px, 0px) rotate(-8deg); }
+      50% { transform: translate(3px, -5px) rotate(6deg); }
+    }
+    .splash-avatar-wrap {
+      animation: floatSlow 3s ease-in-out infinite;
+    }
+    .splash-bee {
+      animation: beeFly 1.2s ease-in-out infinite;
+    }
+
+    /* 單一雙向滾動表格容器 */
+    .table-viewport {
+      flex: 1;
+      min-height: 0;
+      width: 100vw;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      background-color: #ffffff;
+      position: relative;
+    }
+
+    .table-viewport::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .table-viewport::-webkit-scrollbar-thumb {
+      background: #d97706;
+      border-radius: 999px;
+    }
+    .table-viewport::-webkit-scrollbar-track {
+      background: #fef3c7;
+    }
+
+    /* 表格本體：採用 separate 避免 sticky 邊框消失 */
+    .tuition-table {
+      table-layout: fixed;
+      border-collapse: separate;
+      border-spacing: 0;
+      width: max-content;
+      min-width: 100%;
+    }
+
+    /* 尺寸與 Sticky 定位嚴格設定 */
+    .col-school {
+      width: var(--school-col-w);
+      min-width: var(--school-col-w);
+      max-width: var(--school-col-w);
+    }
+
+    .col-month {
+      width: var(--month-col-w);
+      min-width: var(--month-col-w);
+      max-width: var(--month-col-w);
+    }
+
+    .col-year-total {
+      width: var(--total-col-w);
+      min-width: var(--total-col-w);
+      max-width: var(--total-col-w);
+    }
+
+    /* 左上角固定格 */
+    .sticky-top-left {
+      position: sticky;
+      top: 0;
+      left: 0;
+      z-index: 40;
+      background-color: #fde68a;
+      border-right: 2px solid #d97706;
+      border-bottom: 2px solid #d97706;
+      box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    /* 頂部月份表頭固定列 */
+    .sticky-top-month {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background-color: #fef3c7;
+      border-right: 1px solid #f59e0b;
+      border-bottom: 2px solid #d97706;
+    }
+
+    /* 左側學校固定欄 */
+    .sticky-left-school {
+      position: sticky;
+      left: 0;
+      z-index: 20;
+      background-color: #ffffff;
+      border-right: 2px solid #d97706;
+      border-bottom: 1px solid #e2e8f0;
+      box-shadow: 3px 0 6px rgba(0, 0, 0, 0.05);
+    }
+
+    /* 左下角各月總計固定格 */
+    .sticky-bottom-left {
+      position: sticky;
+      bottom: 0;
+      left: 0;
+      z-index: 40;
+      background-color: #fde68a;
+      border-right: 2px solid #d97706;
+      border-top: 2px solid #d97706;
+      box-shadow: 2px -2px 6px rgba(0, 0, 0, 0.08);
+    }
+
+    /* 底部各月總計固定列 */
+    .sticky-bottom-month {
+      position: sticky;
+      bottom: 0;
+      z-index: 30;
+      background-color: #fffbeb;
+      border-right: 1px solid #fcd34d;
+      border-top: 2px solid #d97706;
+      box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.05);
+    }
+
+    /* 專屬拖拉把手樣式：僅點選此處可上下移動學校 */
+    .drag-handle {
+      touch-action: none;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .drag-handle:active {
+      cursor: grabbing;
+    }
+
+    /* Sortable 拖拉時視覺高亮回饋 */
+    .sortable-ghost {
+      opacity: 0.35;
+      background-color: #fde68a !important;
+    }
+    .sortable-chosen .sticky-left-school {
+      background-color: #fef3c7 !important;
+    }
+    .sortable-chosen {
+      box-shadow: 0 10px 25px -5px rgba(217, 119, 6, 0.45);
+      z-index: 50;
+    }
+
+    /* 學校名稱最多兩行，乾淨不爆版 */
+    .school-title-clamp {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      word-break: break-all;
+      line-height: 1.2;
+    }
+
+    /* 儲存格點擊回饋 */
+    .pay-btn {
+      transition: transform 0.1s ease, background-color 0.15s ease;
+    }
+    .pay-btn:active {
+      transform: scale(0.93);
+    }
+
+    /* 允許預覽圖片在手機上長按直接呼出系統「儲存圖片/加入照片」選單 */
+    .touch-saveable-img {
+      -webkit-touch-callout: default !important;
+      -webkit-user-select: auto !important;
+      user-select: auto !important;
+      pointer-events: auto !important;
+      -webkit-user-drag: auto !important;
+      touch-action: pan-x pan-y pinch-zoom !important;
+    }
+
+    /* 列印專用容器：平時完全隱藏，列印時滿版呈現 A4 總表 */
+    #printOnlyWrapper {
+      display: none;
+    }
+    @media print {
+      @page {
+        size: A4 portrait;
+        margin: 5mm;
+      }
+      .app-shell, .modal-backdrop, #toastBox {
+        display: none !important;
+      }
+      html, body {
+        height: auto !important;
+        overflow: visible !important;
+        background: #ffffff !important;
+      }
+      #printOnlyWrapper {
+        display: block !important;
+        width: 100% !important;
+        text-align: center !important;
+      }
+      #printOnlyWrapper img {
+        width: 100% !important;
+        max-width: 100% !important;
+        height: auto !important;
+        display: block !important;
+        margin: 0 auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ================= 淺藍色基底 3秒開機載入進度條畫面 ================= -->
+  <div id="splash-screen">
+    <!-- 頂部雙膠囊狀態列 -->
+    <div class="flex items-center justify-between w-full pt-1">
+      <div class="px-4 py-1.5 rounded-full bg-[#dceefb] text-[#2563eb] font-extrabold text-xs sm:text-sm tracking-wide shadow-inner">
+        Cool &amp; Fresh Edition
+      </div>
+      <div id="splash-countdown" class="text-[#3b82f6] font-extrabold text-xs sm:text-sm tracking-wide">
+        3 秒後自動進入
+      </div>
+    </div>
+
+    <!-- 中央主視覺：圓形小熊徽章 + 小蜜蜂 + 標題 + 3秒進度條 -->
+    <div class="flex flex-col items-center justify-center my-auto w-full max-w-sm mx-auto px-2">
+      <div class="relative mb-6 splash-avatar-wrap">
+        <div class="w-36 h-36 sm:w-44 sm:h-44 rounded-full bg-[#bae6fd] border-[5px] border-white shadow-[0_12px_28px_rgba(37,99,235,0.16)] flex items-center justify-center relative">
+          <!-- 戴博士帽的小熊維尼 SVG -->
+          <svg viewBox="0 0 140 140" class="w-28 h-28 sm:w-32 sm:h-32 overflow-visible">
+            <circle cx="36" cy="48" r="14" fill="#f59e0b" />
+            <circle cx="36" cy="48" r="7.5" fill="#fde68a" />
+            <circle cx="104" cy="48" r="14" fill="#f59e0b" />
+            <circle cx="104" cy="48" r="7.5" fill="#fde68a" />
+            <circle cx="70" cy="74" r="38" fill="#fbbf24" />
+            <ellipse cx="45" cy="80" rx="6.5" ry="4" fill="#f87171" opacity="0.85" />
+            <ellipse cx="95" cy="80" rx="6.5" ry="4" fill="#f87171" opacity="0.85" />
+            <circle cx="55" cy="69" r="4.5" fill="#1e293b" />
+            <circle cx="53.5" cy="67.5" r="1.5" fill="#ffffff" />
+            <circle cx="85" cy="69" r="4.5" fill="#1e293b" />
+            <circle cx="83.5" cy="67.5" r="1.5" fill="#ffffff" />
+            <ellipse cx="70" cy="81" rx="11.5" ry="9" fill="#ffffff" />
+            <ellipse cx="70" cy="78" rx="4.5" ry="3.2" fill="#1e293b" />
+            <path d="M 66 83 Q 70 87 74 83" stroke="#1e293b" stroke-width="2.5" stroke-linecap="round" fill="none" />
+            <!-- 海軍藍博士帽 -->
+            <polygon points="70,18 22,34 70,48 118,34" fill="#1e3a8a" />
+            <path d="M 44 40 L 44 50 Q 70 57 96 50 L 96 40 Z" fill="#1e40af" />
+            <path d="M 94 37 L 106 49 L 106 58" stroke="#38bdf8" stroke-width="3" stroke-linecap="round" fill="none" />
+            <circle cx="106" cy="59" r="2.8" fill="#0284c7" />
+          </svg>
+        </div>
+        <!-- 右上角振翅小蜜蜂 -->
+        <div class="absolute -top-1 -right-2 w-11 h-11 splash-bee">
+          <svg viewBox="0 0 50 50" class="w-full h-full overflow-visible">
+            <ellipse cx="21" cy="14" rx="6" ry="8" fill="#ffffff" opacity="0.9" transform="rotate(-15 21 14)" />
+            <ellipse cx="29" cy="14" rx="6" ry="8" fill="#ffffff" opacity="0.9" transform="rotate(15 29 14)" />
+            <ellipse cx="25" cy="26" rx="12" ry="9.5" fill="#f59e0b" stroke="#1e293b" stroke-width="2.5" />
+            <path d="M 21 17.5 L 21 34.5" stroke="#1e293b" stroke-width="2.8" />
+            <path d="M 28 17.5 L 28 34.5" stroke="#1e293b" stroke-width="2.8" />
+            <polygon points="37,24 43,26 37,28" fill="#1e293b" />
+          </svg>
+        </div>
+      </div>
+
+      <!-- 主標題與膠囊副標題 -->
+      <h1 class="text-[26px] sm:text-3xl font-black text-[#0f172a] tracking-wider text-center mb-3 drop-shadow-sm">
+        維尼全腦開發工作室
+      </h1>
+      <div class="px-6 py-2 rounded-full bg-[#dbeafe] border border-[#bfdbfe] text-[#1d4ed8] font-extrabold text-sm sm:text-base tracking-wide shadow-sm mb-7">
+        維尼全腦團班收費系統1.0 by Cody Bee
+      </div>
+
+      <!-- 3秒進度條 -->
+      <div class="w-full bg-[#dbeafe] h-4 rounded-full p-0.5 border border-[#bfdbfe] shadow-inner overflow-hidden mb-2.5">
+        <div id="splash-bar-fill" class="h-full rounded-full bg-gradient-to-r from-[#38bdf8] via-[#0284c7] to-[#2563eb] transition-all duration-75" style="width: 0%;"></div>
+      </div>
+
+      <div class="w-full flex items-center justify-between text-xs sm:text-sm font-bold text-[#1e40af] px-0.5">
+        <span id="splash-status-text">正在準備學校名單與收費資料...</span>
+        <span id="splash-percent-text" class="font-black tabular-nums">0%</span>
+      </div>
+    </div>
+
+    <!-- 底部直接進入系統按鈕 -->
+    <div class="w-full max-w-sm mx-auto">
+      <button onclick="enterMainSystem()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-[#0284c7] to-[#2563eb] hover:from-[#0369a1] hover:to-[#1d4ed8] active:scale-[0.99] text-white font-black text-base sm:text-lg tracking-wider shadow-[0_8px_20px_rgba(37,99,235,0.32)] flex items-center justify-center gap-2 transition">
+        <span>點此直接進入系統</span>
+        <span class="text-xl leading-none">→</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= 整體固定滿版容器 ================= -->
+  <div class="app-shell">
+
+    <!-- ================= 頂部精煉抬頭與工具列 ================= -->
+    <header class="bg-gradient-to-r from-sky-700 via-sky-600 to-blue-600 text-white shadow-md shrink-0 z-40 px-2.5 py-2.5">
+      <div class="max-w-7xl mx-auto flex flex-col gap-2">
+        
+        <!-- 第一列：完整標題「維尼全腦團班收費系統1.0」（絕不截斷）+ 精簡總額徽章 -->
+        <div class="flex items-center justify-between gap-1.5">
+          <div class="flex items-center gap-1.5 min-w-0">
+            <button onclick="replaySplashScreen()" title="點此重播3秒開機畫面" class="w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-white/20 hover:bg-white/30 active:scale-95 flex items-center justify-center border border-white/30 shrink-0">
+              <span class="text-base sm:text-lg">🐻</span>
+            </button>
+            <h1 class="text-[14px] sm:text-xl font-black tracking-tight truncate leading-none">
+              維尼全腦團班收費系統1.0
+            </h1>
+          </div>
+
+          <!-- 右側精簡統計徽章 -->
+          <div class="flex items-center gap-1.5 bg-sky-950/40 px-2.5 py-1 rounded-lg border border-white/20 text-xs sm:text-sm shrink-0">
+            <span class="text-sky-100 font-bold hidden xs:inline"><span id="hdrSchoolCount">0</span>校</span>
+            <span class="text-emerald-300 font-black"><span id="hdrPaidCount">0</span>筆</span>
+            <span class="text-white/30">|</span>
+            <span id="hdrGrandTotal" class="font-black text-yellow-300 text-sm sm:text-base">$0</span>
+          </div>
+        </div>
+
+        <!-- 第二列：6 個功能按鈕高度設為 py-1.5（手機端 3欄x2列 寬敞按鈕，電腦端 6欄大按鈕） -->
+        <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1.5 border-t border-white/20">
+          <!-- 1. 一鍵切換 (符號/金額) -->
+          <button onclick="toggleDisplayMode()" class="py-1.5 px-2 bg-white text-amber-950 hover:bg-amber-50 active:scale-95 rounded-xl text-[15px] sm:text-[17px] font-black shadow-md flex items-center justify-center gap-1.5 truncate">
+            <i id="modeIcon" class="fa-solid fa-circle-check text-emerald-600 text-base sm:text-lg"></i>
+            <span id="modeBtnLabel">切換:⭕</span>
+          </button>
+
+          <!-- 2. 字體縮放 (四段循環切換) -->
+          <button onclick="cycleFontSize()" class="py-1.5 px-2 bg-amber-900/50 hover:bg-amber-900/70 active:scale-95 text-white rounded-xl text-[15px] sm:text-[17px] font-black border border-white/30 shadow-md flex items-center justify-center gap-1.5 truncate">
+            <i class="fa-solid fa-text-height text-amber-200 text-base sm:text-lg"></i>
+            <span id="fontBtnLabel">字體:大</span>
+          </button>
+
+          <!-- 3. 新增學校 -->
+          <button onclick="openSchoolModal()" class="py-1.5 px-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-[15px] sm:text-[17px] font-black shadow-md border border-emerald-400/40 flex items-center justify-center gap-1.5 truncate">
+            <i class="fa-solid fa-plus text-base sm:text-lg"></i>
+            <span>新增學校</span>
+          </button>
+
+          <!-- 4. 匯出 / 匯入學校文字檔 (.txt) -->
+          <button onclick="openSchoolTxtModal()" class="py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white rounded-xl text-[15px] sm:text-[17px] font-black shadow-md border border-indigo-400/40 flex items-center justify-center gap-1.5 truncate">
+            <i class="fa-solid fa-file-lines text-base sm:text-lg"></i>
+            <span>學校匯出入</span>
+          </button>
+
+          <!-- 5. 存檔 / A4輸出 -->
+          <button onclick="openSavePreviewModal()" class="py-1.5 px-2 bg-amber-950 hover:bg-slate-900 active:scale-95 text-amber-300 rounded-xl text-[15px] sm:text-[17px] font-black shadow-md border border-amber-400/40 flex items-center justify-center gap-1.5 truncate">
+            <i class="fa-solid fa-camera text-base sm:text-lg"></i>
+            <span>存檔/A4</span>
+          </button>
+
+          <!-- 6. 一鍵清除 -->
+          <button onclick="promptClearAllCells()" class="py-1.5 px-2 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white rounded-xl text-[15px] sm:text-[17px] font-black shadow-md border border-rose-400/40 flex items-center justify-center gap-1.5 truncate">
+            <i class="fa-solid fa-eraser text-base sm:text-lg"></i>
+            <span>一鍵清除</span>
+          </button>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- ================= 主表格區域 (佔據 82%+ 垂直螢幕空間，嚴格 1:2 比例) ================= -->
+    <main class="table-viewport">
+      <table class="tuition-table text-center">
+        <thead>
+          <tr class="h-12 text-[16px] font-black text-amber-950">
+            <!-- 左上角固定：只簡潔寫「學校名稱 (⠿拖拉)」，絕不截斷 -->
+            <th class="sticky-top-left col-school px-2 text-left align-middle">
+              <div class="flex items-center justify-between whitespace-nowrap">
+                <span class="text-base sm:text-xl font-black text-amber-950">學校名稱</span>
+                <span class="text-xs sm:text-sm bg-amber-800 text-white px-1.5 py-0.5 rounded font-bold">⠿拖拉</span>
+              </div>
+            </th>
+
+            <!-- 右側 2/3 區域：1月 ~ 12月 + 年度總計 (月份字體精準設定為 16px) -->
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">1月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">2月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">3月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">4月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">5月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">6月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">7月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">8月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">9月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">10月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">11月</th>
+            <th class="sticky-top-month col-month align-middle text-[16px] font-black tracking-tight">12月</th>
+            <th class="sticky-top-month col-year-total align-middle bg-amber-200 text-amber-950 border-l-2 border-amber-500 text-[16px] font-black">
+              年度總計
+            </th>
+          </tr>
+        </thead>
+
+        <!-- 學校與收費資料列 (支援按住 ⠿ 上下拖曳排序) -->
+        <tbody id="schoolTableBody">
+          <!-- 由 JavaScript 動態渲染 -->
+        </tbody>
+
+        <!-- 底部固定「各月總計」列 (單行不換行，字體同步放大) -->
+        <tfoot>
+          <tr class="h-13 font-black text-slate-900">
+            <td class="sticky-bottom-left col-school px-2.5 text-left align-middle whitespace-nowrap">
+              <div class="flex items-center gap-1.5 text-sm sm:text-lg font-black text-amber-950">
+                <i class="fa-solid fa-coins text-amber-700 text-sm sm:text-base"></i>
+                <span>各月總計</span>
+              </div>
+            </td>
+            <td id="footMonth-1" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-2" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-3" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-4" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-5" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-6" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-7" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-8" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-9" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-10" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-11" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footMonth-12" class="sticky-bottom-month col-month text-sm sm:text-lg font-black text-emerald-800 align-middle">$0</td>
+            <td id="footGrandTotal" class="sticky-bottom-month col-year-total text-sm sm:text-lg font-black text-rose-700 bg-amber-200 border-l-2 border-amber-500 align-middle">$0</td>
+          </tr>
+        </tfoot>
+      </table>
+    </main>
+
+  </div>
+
+  <!-- ================= 彈窗 1：點選收費格（圓圈標記 / 輸入金額 / 取消收費） ================= -->
+  <div id="cellModal" class="modal-backdrop fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+        <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+          <span class="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-calendar-check"></i>
+          </span>
+          <span id="cellModalTitle">收費設定</span>
+        </h3>
+        <button onclick="closeModal('cellModal')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <!-- 步驟 1：選擇標記圓圈或取消 -->
+      <div id="cellStep1">
+        <div id="cellStatusBanner" class="text-xs font-bold p-2.5 rounded-xl mb-3 border"></div>
+        <div class="space-y-2.5">
+          <button onclick="goToAmountStep()" class="w-full py-3.5 px-4 bg-emerald-600 hover:bg-emerald-500 active:scale-98 text-white font-black rounded-xl shadow-md flex items-center justify-center gap-2 text-sm sm:text-base transition">
+            <i class="fa-regular fa-circle-check text-lg"></i>
+            <span id="btnSelectCircleText">⭕ 完成收費（輸入金額）</span>
+          </button>
+
+          <button onclick="promptCancelSingleCell()" class="w-full py-3 px-4 bg-rose-50 hover:bg-rose-100 active:scale-98 text-rose-700 font-black rounded-xl border border-rose-200 flex items-center justify-center gap-2 text-sm transition">
+            <i class="fa-solid fa-ban"></i>
+            <span>✖ 取消收費（恢復預設空白格）</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 步驟 2：提示輸入收費金額 -->
+      <div id="cellStep2" class="hidden">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 mb-3 flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-sm shrink-0 shadow">
+            ⭕
+          </div>
+          <div class="text-xs text-emerald-950">
+            <div class="font-black">已選取完成符號（圓圈）</div>
+            <div class="text-emerald-700 font-bold">請輸入或點選當月收費金額：</div>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <div class="relative">
+            <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-emerald-600 text-lg font-black">$</span>
+            <input type="number" id="cellAmountInput" inputmode="numeric" placeholder="請輸入收費金額..."
+                   onkeydown="if(event.key==='Enter') saveCellPayment(true)"
+                   class="w-full pl-8 pr-3 py-2.5 rounded-xl border-2 border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400 text-lg font-black text-slate-900">
+          </div>
+
+          <!-- 常用金額快選鍵 -->
+          <div class="mt-2.5">
+            <span class="text-[11px] text-slate-500 font-bold block mb-1">常用金額快速點選：</span>
+            <div class="grid grid-cols-3 gap-1.5">
+              <button type="button" onclick="fillQuickAmount(1500)" class="py-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-800 rounded-lg text-xs font-black border border-slate-200">$1,500</button>
+              <button type="button" onclick="fillQuickAmount(2000)" class="py-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-800 rounded-lg text-xs font-black border border-slate-200">$2,000</button>
+              <button type="button" onclick="fillQuickAmount(2500)" class="py-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-800 rounded-lg text-xs font-black border border-slate-200">$2,500</button>
+              <button type="button" onclick="fillQuickAmount(3000)" class="py-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-800 rounded-lg text-xs font-black border border-slate-200">$3,000</button>
+              <button type="button" onclick="fillQuickAmount(3600)" class="py-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-800 rounded-lg text-xs font-black border border-slate-200">$3,600</button>
+              <button type="button" onclick="fillQuickAmount(4500)" class="py-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-800 rounded-lg text-xs font-black border border-slate-200">$4,500</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="space-y-2 pt-1">
+          <button onclick="saveCellPayment(true)" class="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-md flex items-center justify-center gap-2 text-sm transition">
+            <i class="fa-solid fa-check-double"></i>
+            <span>確認紀錄金額（標示完成收費）</span>
+          </button>
+          <div class="flex gap-2">
+            <button onclick="saveCellPayment(false)" class="flex-1 py-2 px-3 bg-amber-100 hover:bg-amber-200 text-amber-950 font-black rounded-xl text-xs">
+              僅標記圓圈 ($0)
+            </button>
+            <button onclick="promptCancelSingleCell()" class="flex-1 py-2 px-3 bg-rose-50 hover:bg-rose-100 text-rose-700 font-black rounded-xl border border-rose-200 text-xs">
+              ✖ 取消收費
+            </button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 2：學校管理（新增 / 修改校名 / 刪除學校） ================= -->
+  <div id="schoolModal" class="modal-backdrop fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200">
+      <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100">
+        <h3 id="schoolModalHeading" class="text-base font-black text-slate-900 flex items-center gap-2">
+          <i class="fa-solid fa-school text-amber-600"></i>
+          <span>新增學校</span>
+        </h3>
+        <button onclick="closeModal('schoolModal')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="mb-4">
+        <label class="block text-xs font-black text-slate-700 mb-1.5">學校或團班名稱：</label>
+        <input type="text" id="schoolNameInput" placeholder="例如：維尼總校、文山分校..."
+               onkeydown="if(event.key==='Enter') saveSchoolItem()"
+               class="w-full px-3.5 py-2.5 rounded-xl border-2 border-slate-300 focus:outline-none focus:border-amber-500 text-base font-black text-slate-900">
+      </div>
+      <div class="flex flex-col gap-2">
+        <div class="flex gap-2">
+          <button onclick="closeModal('schoolModal')" class="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm">
+            取消
+          </button>
+          <button onclick="saveSchoolItem()" class="flex-1 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-black rounded-xl text-sm shadow">
+            確認儲存
+          </button>
+        </div>
+        <!-- 編輯既有學校時顯示刪除按鈕 -->
+        <button id="deleteSchoolInModalBtn" onclick="promptDeleteCurrentSchool()" class="hidden w-full py-2.5 mt-1 bg-rose-50 hover:bg-rose-100 text-rose-600 font-black rounded-xl text-xs border border-rose-200 flex items-center justify-center gap-1.5">
+          <i class="fa-solid fa-trash-can"></i>
+          <span>刪除此學校與收費紀錄</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 2-B：學校名單文字檔 (.txt) 匯出 / 匯入管理 ================= -->
+  <div id="schoolTxtModal" class="modal-backdrop fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-md w-full p-4 sm:p-5 shadow-2xl border border-slate-200 flex flex-col max-h-[92dvh]">
+      <div class="flex justify-between items-center mb-3 pb-2 border-b border-slate-100 shrink-0">
+        <h3 class="text-base font-black text-slate-900 flex items-center gap-2">
+          <span class="w-7 h-7 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-file-lines"></i>
+          </span>
+          <span>學校名單文字檔（匯出 / 匯入）</span>
+        </h3>
+        <button onclick="closeModal('schoolTxtModal')" class="text-slate-400 hover:text-slate-600 p-1">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+
+      <div class="flex-1 overflow-y-auto space-y-3 pr-0.5">
+        <!-- 1. 匯出學校文字檔區 -->
+        <div class="bg-sky-50 border border-sky-200 rounded-xl p-3">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-xs font-black text-sky-950 flex items-center gap-1.5">
+              <i class="fa-solid fa-file-export text-sky-600"></i>
+              匯出目前學校名單（共 <span id="txtModalSchoolCount">0</span> 所）
+            </span>
+            <span class="text-[10px] font-bold bg-sky-200 text-sky-900 px-1.5 py-0.5 rounded">.txt 格式</span>
+          </div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button type="button" onclick="exportSchoolsTxtFile()" class="py-2 px-2 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-black rounded-lg text-xs shadow flex items-center justify-center gap-1">
+              <i class="fa-solid fa-download"></i>
+              <span>下載 .txt</span>
+            </button>
+            <button type="button" onclick="shareSchoolsTxtMobile()" class="py-2 px-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black rounded-lg text-xs shadow flex items-center justify-center gap-1">
+              <i class="fa-solid fa-share-nodes"></i>
+              <span>分享 .txt</span>
+            </button>
+            <button type="button" onclick="copySchoolsTxtToClipboard()" class="py-2 px-2 bg-white hover:bg-slate-100 active:scale-95 text-sky-900 font-black rounded-lg text-xs border border-sky-300 flex items-center justify-center gap-1">
+              <i class="fa-solid fa-copy"></i>
+              <span>複製文字</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. 匯入學校文字檔區 -->
+        <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3 space-y-2.5">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-black text-amber-950 flex items-center gap-1.5">
+              <i class="fa-solid fa-file-import text-amber-600"></i>
+              匯入學校文字檔（一行一間學校）
+            </span>
+            <!-- 隱藏檔案選取器，支援 .txt 與純文字檔 -->
+            <input type="file" id="schoolTxtFileInput" accept=".txt,text/plain" class="hidden" onchange="handleSchoolTxtFileSelect(event)">
+            <button type="button" onclick="document.getElementById('schoolTxtFileInput').click()" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-black rounded-lg text-xs shadow flex items-center gap-1">
+              <i class="fa-solid fa-folder-open"></i>
+              <span>選取 .txt 檔案</span>
+            </button>
+          </div>
+
+          <p class="text-[11px] text-slate-600 font-bold leading-relaxed">
+            可點選上方「選取 .txt 檔案」自動載入，或直接在下方文字框貼上／編輯學校名單（每行一間學校，亦支援逗號分隔）：
+          </p>
+
+          <textarea id="schoolTxtTextarea" rows="7" placeholder="例如：&#10;三個門&#10;藝起玩&#10;Bee&#10;天恩"
+                    class="w-full p-2.5 rounded-xl border-2 border-amber-300 focus:outline-none focus:border-amber-500 text-sm font-black text-slate-900 bg-white leading-relaxed resize-y"></textarea>
+
+          <div class="grid grid-cols-2 gap-2 pt-1">
+            <button type="button" onclick="applySchoolsFromTextarea('append')" class="py-2.5 px-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-black rounded-xl text-xs shadow flex items-center justify-center gap-1">
+              <i class="fa-solid fa-circle-plus"></i>
+              <span>附加匯入（保留現有）</span>
+            </button>
+            <button type="button" onclick="applySchoolsFromTextarea('replace')" class="py-2.5 px-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-black rounded-xl text-xs shadow flex items-center justify-center gap-1">
+              <i class="fa-solid fa-arrows-rotate"></i>
+              <span>覆蓋現有學校名單</span>
+            </button>
+          </div>
+          <button type="button" onclick="resetToDefaultSchools()" class="w-full py-2 px-2 bg-amber-200/80 hover:bg-amber-300/80 active:scale-95 text-amber-950 font-black rounded-xl text-xs border border-amber-400 flex items-center justify-center gap-1.5 mt-1">
+            <i class="fa-solid fa-rotate-left"></i>
+            <span>一鍵載入預設 19 間學校名單</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="pt-3 mt-2 border-t border-slate-100 shrink-0">
+        <button type="button" onclick="closeModal('schoolTxtModal')" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs">
+          關閉視窗
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 3：通用（是 / 否）確認提示視窗 ================= -->
+  <div id="confirmDialog" class="modal-backdrop fixed inset-0 bg-slate-900/65 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-sm w-full p-5 shadow-2xl border border-slate-200 text-center">
+      <div class="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mx-auto mb-3 text-xl shadow-inner">
+        <i class="fa-solid fa-triangle-exclamation"></i>
+      </div>
+      <h3 id="confirmTitleText" class="text-base sm:text-lg font-black text-slate-900 mb-1.5">確認提示</h3>
+      <p id="confirmBodyText" class="text-xs sm:text-sm text-slate-600 font-bold mb-5 leading-relaxed"></p>
+      <div class="flex gap-2.5">
+        <button onclick="handleConfirmAnswer(false)" class="flex-1 py-2.5 px-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-sm border border-slate-300">
+          否（取消）
+        </button>
+        <button onclick="handleConfirmAnswer(true)" class="flex-1 py-2.5 px-3 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl text-sm shadow-md">
+          是（確認）
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 4：確認輸出 A4 收費總表（含四重防擋存圖機制、JPG下載、A4列印確認） ================= -->
+  <div id="savePreviewModal" class="modal-backdrop fixed inset-0 bg-slate-900/75 backdrop-blur-sm z-50 hidden flex items-center justify-center p-2 sm:p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full max-h-[94dvh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+      
+      <div class="px-3.5 py-2.5 bg-gradient-to-r from-amber-600 to-orange-500 text-white flex justify-between items-center shrink-0">
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-file-invoice-dollar text-lg"></i>
+          <div>
+            <h3 class="text-sm sm:text-base font-black leading-tight">存檔與 A4 尺寸輸出確認</h3>
+            <p class="text-[11px] text-amber-100 font-bold">支援手機分享存圖、Blob 下載、長按存相簿與 A4 列印</p>
+          </div>
+        </div>
+        <button onclick="closeModal('savePreviewModal')" class="w-8 h-8 rounded-full bg-black/20 hover:bg-black/30 flex items-center justify-center text-white">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- 高清 A4 圖片預覽區 -->
+      <div class="flex-1 overflow-y-auto p-2.5 bg-slate-200 flex flex-col items-center">
+        <!-- 手機長按與截圖雙保險提示條 -->
+        <div class="w-full bg-emerald-950 text-white rounded-xl px-3 py-2 mb-2 text-xs font-bold flex items-center justify-between gap-2 shadow-sm border border-emerald-500/40">
+          <div class="flex items-center gap-1.5 leading-snug">
+            <span class="px-1.5 py-0.5 bg-emerald-500 text-white rounded text-[10px] font-black shrink-0">存圖秘訣</span>
+            <span class="text-emerald-100">已解除觸控鎖定！可<strong class="text-yellow-300 underline mx-0.5">長按圖片存檔</strong>，或點右側<strong class="text-amber-300">滿版截圖</strong></span>
+          </div>
+          <button onclick="openFullScreenImageMode()" class="px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg text-[11px] font-black shrink-0 whitespace-nowrap shadow">
+            📸 滿版截圖/長按
+          </button>
+        </div>
+
+        <div class="w-full bg-white p-1.5 rounded-xl shadow border border-slate-300 flex justify-center">
+          <a id="a4PreviewLink" href="#" target="_blank" rel="noopener" class="w-full flex justify-center" onclick="if(event.target.tagName==='IMG') return true;">
+            <img id="a4PreviewImage" src="" alt="維尼全腦團班收費系統1.0 A4總表預覽" class="touch-saveable-img w-full h-auto max-w-[480px] rounded border border-slate-200" />
+          </a>
+        </div>
+      </div>
+
+      <!-- 底部多管道防擋存檔與 LINE 連動按鈕區 -->
+      <div class="p-2.5 sm:p-3 bg-white border-t border-slate-200 shrink-0 flex flex-col gap-2">
+        <!-- 第一排：LINE 專屬連動（100% 穿透沙盒限制） -->
+        <div class="grid grid-cols-2 gap-2">
+          <!-- 方法 1：直接喚起 LINE App 傳送完整收費總表 -->
+          <button onclick="shareReportToLineApp()" class="py-2.5 px-2.5 bg-[#06C755] hover:bg-[#05b34c] active:scale-95 text-white font-black rounded-xl shadow flex items-center justify-center gap-1.5 text-xs sm:text-sm">
+            <i class="fa-brands fa-line text-base sm:text-lg"></i>
+            <span>直傳 LINE 聊天室</span>
+          </button>
+
+          <!-- 方法 2：複製圖片或文字貼上 LINE -->
+          <button onclick="copyReportImageOrText()" class="py-2.5 px-2.5 bg-emerald-700 hover:bg-emerald-600 active:scale-95 text-white font-black rounded-xl shadow flex items-center justify-center gap-1.5 text-xs sm:text-sm">
+            <i class="fa-solid fa-copy"></i>
+            <span>複製總表貼上 LINE</span>
+          </button>
+        </div>
+
+        <!-- 第二排：圖檔下載與系統分享 -->
+        <div class="grid grid-cols-2 gap-2">
+          <!-- 方法 3：呼叫手機原生分享/存相簿選單 -->
+          <button onclick="shareOrSaveImageMobile()" class="py-2 px-2 bg-sky-600 hover:bg-sky-500 active:scale-95 text-white font-black rounded-xl shadow flex items-center justify-center gap-1.5 text-xs">
+            <i class="fa-solid fa-share-nodes"></i>
+            <span>系統分享 / 存相簿</span>
+          </button>
+
+          <!-- 方法 4：Blob 二進位直接下載 JPG -->
+          <button onclick="triggerJpgDownload()" class="py-2 px-2 bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-black rounded-xl shadow flex items-center justify-center gap-1.5 text-xs">
+            <i class="fa-solid fa-download"></i>
+            <span>下載 JPG / 另開新頁</span>
+          </button>
+        </div>
+
+        <!-- 第三排：滿版截圖、A4 列印、關閉 -->
+        <div class="grid grid-cols-3 gap-2">
+          <button onclick="openFullScreenImageMode()" class="py-2 px-2 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-black rounded-xl shadow flex items-center justify-center gap-1 text-xs">
+            <i class="fa-solid fa-Mobile-screen-button"></i>
+            <span>📸 滿版截圖頁</span>
+          </button>
+
+          <button onclick="promptA4PrintConfirm()" class="py-2 px-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-amber-300 font-black rounded-xl shadow flex items-center justify-center gap-1 text-xs">
+            <i class="fa-solid fa-print"></i>
+            <span>A4 列印 / PDF</span>
+          </button>
+
+          <button onclick="closeModal('savePreviewModal')" class="py-2 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-black rounded-xl text-xs border border-slate-300">
+            關閉視窗
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 彈窗 5：全螢幕純圖片長按與「一鍵隱藏按鈕截圖模式」 ================= -->
+  <div id="fullScreenImgModal" class="fixed inset-0 bg-white z-[60] hidden flex flex-col">
+    <!-- 頂部導覽列（可點擊隱藏以便乾淨截圖） -->
+    <div id="fsTopBar" class="px-3 py-2.5 bg-slate-900 text-white flex items-center justify-between shrink-0 shadow-md">
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="px-2 py-0.5 bg-emerald-500 text-white rounded text-[11px] font-black shrink-0">長按或截圖</span>
+        <span class="text-xs font-bold text-amber-300 truncate">長按下方圖片存檔，或點「隱藏頂欄」直接手機截圖</span>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button onclick="toggleCleanScreenshotMode(true)" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-black">
+          👁️ 隱藏頂欄截圖
+        </button>
+        <button onclick="closeModal('fullScreenImgModal')" class="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-black">
+          ✕ 返回
+        </button>
+      </div>
+    </div>
+
+    <!-- 隱藏頂欄後的浮動小返回鈕 -->
+    <button id="fsFloatingBackBtn" onclick="toggleCleanScreenshotMode(false)" class="hidden fixed bottom-4 right-4 z-[70] px-3 py-1.5 bg-slate-900/75 text-white rounded-full text-xs font-black shadow-lg border border-white/30">
+      顯示工具列 / 返回
+    </button>
+
+    <div class="flex-1 overflow-auto p-1 sm:p-3 bg-white flex items-start justify-center">
+      <img id="fullScreenSaveImg" src="" alt="長按儲存收費總表" class="touch-saveable-img w-full max-w-[600px] h-auto bg-white" />
+    </div>
+  </div>
+
+  <!-- A4 列印專用容器 -->
+  <div id="printOnlyWrapper">
+    <img id="printOnlyImage" src="" alt="A4列印總表" />
+  </div>
+
+  <!-- 輕量通知 Toast -->
+  <div id="toastBox" class="fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/95 text-white text-xs font-black py-2 px-4 rounded-full shadow-xl z-50 pointer-events-none opacity-0 transition-opacity duration-300 flex items-center gap-2 border border-white/15 whitespace-nowrap">
+    <i class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toastText">操作完成</span>
+  </div>
+
+  <!-- ================= 系統核心邏輯 JavaScript ================= -->
+  <script>
+    const STORAGE_KEY = 'WINNIE_TUITION_V1_DEFAULT19_DATA';
+
+    // 預設內建 19 間合作學校名單
+    const DEFAULT_SCHOOLS = [
+      { id: 'sch_1', name: '三個門' },
+      { id: 'sch_2', name: '藝起玩' },
+      { id: 'sch_3', name: 'Bee' },
+      { id: 'sch_4', name: '天恩' },
+      { id: 'sch_5', name: '米奇' },
+      { id: 'sch_6', name: '艾樂芬' },
+      { id: 'sch_7', name: '婦友' },
+      { id: 'sch_8', name: '香潭' },
+      { id: 'sch_9', name: '原苗' },
+      { id: 'sch_10', name: '美和' },
+      { id: 'sch_11', name: '美金' },
+      { id: 'sch_12', name: '正心' },
+      { id: 'sch_13', name: '華山' },
+      { id: 'sch_14', name: '狄士耐' },
+      { id: 'sch_15', name: '樂閎' },
+      { id: 'sch_16', name: '維也納' },
+      { id: 'sch_17', name: '心橋光' },
+      { id: 'sch_18', name: '友緣' },
+      { id: 'sch_19', name: '侑好' }
+    ];
+
+    // 四段字體大小設定（小 / 中 / 大 / 特大）— 同步放大月份儲存格內文字
+    const FONT_CONFIGS = [
+      { label: '小', schoolText: 'text-[14px] sm:text-base font-black', cellText: 'text-sm sm:text-base', rowH: 'h-[62px]', btnH: 'h-[46px]' },
+      { label: '中', schoolText: 'text-[15px] sm:text-lg font-black', cellText: 'text-base sm:text-lg', rowH: 'h-[66px]', btnH: 'h-[50px]' },
+      { label: '大', schoolText: 'text-[17px] sm:text-xl font-black', cellText: 'text-lg sm:text-xl', rowH: 'h-[72px]', btnH: 'h-[54px]' },
+      { label: '特大', schoolText: 'text-[19px] sm:text-2xl font-black', cellText: 'text-xl sm:text-2xl', rowH: 'h-[78px]', btnH: 'h-[60px]' }
+    ];
+
+    let state = {
+      displayMode: 'symbol', // 'symbol' (⭕) 或 'amount' ($金額)
+      fontIndex: 2,          // 預設 2 ('大'，超粗體醒目顯示)
+      schools: [],
+      payments: {}           // { schoolId: { '1': { paid: true, amount: 2500 }, ... } }
+    };
+
+    let activeCell = { schoolId: null, schoolName: '', month: null };
+    let editingSchoolId = null;
+    let confirmCallback = null;
+    let sortableInstance = null;
+    let cachedA4DataUrl = '';
+    let cachedA4Blob = null;
+    let cachedA4BlobUrl = '';
+    let splashInterval = null;
+    let splashEntered = false;
+
+    function startSplashScreen(durationMs = 3000) {
+      const splashEl = document.getElementById('splash-screen');
+      const barFill = document.getElementById('splash-bar-fill');
+      const percentText = document.getElementById('splash-percent-text');
+      const statusText = document.getElementById('splash-status-text');
+      const countdownText = document.getElementById('splash-countdown');
+      if (!splashEl) return;
+
+      splashEntered = false;
+      splashEl.classList.remove('splash-hidden');
+      barFill.style.width = '0%';
+      percentText.textContent = '0%';
+      countdownText.textContent = '3 秒後自動進入';
+
+      if (splashInterval) clearInterval(splashInterval);
+      const startTime = performance.now();
+
+      splashInterval = setInterval(() => {
+        const elapsed = performance.now() - startTime;
+        const progress = Math.min(100, Math.floor((elapsed / durationMs) * 100));
+        const remainSec = Math.max(1, Math.ceil((durationMs - elapsed) / 1000));
+
+        barFill.style.width = progress + '%';
+        percentText.textContent = progress + '%';
+        countdownText.textContent = remainSec + ' 秒後自動進入';
+
+        if (progress < 40) {
+          statusText.textContent = '正在準備學校名單與收費資料...';
+        } else if (progress < 80) {
+          statusText.textContent = '正在載入 1~12 月團班收費總表...';
+        } else {
+          statusText.textContent = '準備完成，即將進入維尼全腦團班收費系統1.0...';
+        }
+
+        if (elapsed >= durationMs) {
+          clearInterval(splashInterval);
+          barFill.style.width = '100%';
+          percentText.textContent = '100%';
+          enterMainSystem();
+        }
+      }, 30);
+    }
+
+    function enterMainSystem() {
+      if (splashEntered) return;
+      splashEntered = true;
+      if (splashInterval) clearInterval(splashInterval);
+      const splashEl = document.getElementById('splash-screen');
+      if (splashEl) splashEl.classList.add('splash-hidden');
+    }
+
+    function replaySplashScreen() {
+      startSplashScreen(3000);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      loadState();
+      updateToolbarButtons();
+      renderTable();
+      initSortableDrag();
+      startSplashScreen(3000);
+    });
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state.displayMode = parsed.displayMode || 'symbol';
+          state.fontIndex = typeof parsed.fontIndex === 'number' ? parsed.fontIndex : 2;
+          state.schools = Array.isArray(parsed.schools) && parsed.schools.length > 0
+            ? parsed.schools
+            : JSON.parse(JSON.stringify(DEFAULT_SCHOOLS));
+          state.payments = parsed.payments || {};
+        } else {
+          state.schools = JSON.parse(JSON.stringify(DEFAULT_SCHOOLS));
+          state.payments = {};
+          saveState();
+        }
+      } catch (err) {
+        state.schools = JSON.parse(JSON.stringify(DEFAULT_SCHOOLS));
+        state.payments = {};
+      }
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (err) {
+        console.error('儲存失敗:', err);
+      }
+    }
+
+    /* ---------------- 專屬拖拉把手排序 (SortableJS) ---------------- */
+    function initSortableDrag() {
+      const tbody = document.getElementById('schoolTableBody');
+      if (!tbody || typeof Sortable === 'undefined') return;
+      if (sortableInstance) sortableInstance.destroy();
+
+      sortableInstance = new Sortable(tbody, {
+        handle: '.drag-handle', // 僅點選左側 ⠿ 把手才觸發拖拉
+        animation: 180,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        onEnd: function (evt) {
+          if (evt.oldIndex === evt.newIndex || evt.oldIndex == null || evt.newIndex == null) return;
+          const movedItem = state.schools.splice(evt.oldIndex, 1)[0];
+          state.schools.splice(evt.newIndex, 0, movedItem);
+          saveState();
+          renderTable();
+          showToast(`已調整「${movedItem.name}」順序`);
+        }
+      });
+    }
+
+    /* ---------------- 渲染主表格 ---------------- */
+    function renderTable() {
+      const tbody = document.getElementById('schoolTableBody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const fontCfg = FONT_CONFIGS[state.fontIndex] || FONT_CONFIGS[2];
+      const monthlyTotals = new Array(13).fill(0);
+      let grandTotal = 0;
+      let paidCount = 0;
+
+      state.schools.forEach((school) => {
+        const tr = document.createElement('tr');
+        tr.className = `${fontCfg.rowH} bg-white transition-colors`;
+        tr.dataset.id = school.id;
+
+        let schoolYearSum = 0;
+
+        // 1. 左側固定學校欄位 (33.33vw，水平 Flex Row：左側⠿拖拉把手 28px + 中間超粗體校名 + 右側精巧編輯圖示)
+        const tdSchool = document.createElement('td');
+        tdSchool.className = 'sticky-left-school col-school px-1.5 py-1 text-left align-middle';
+        tdSchool.innerHTML = `
+          <div class="flex items-center justify-between gap-1 w-full h-full">
+            <!-- 專屬拖拉把手 (寬 26px) -->
+            <div class="drag-handle w-[26px] h-10 rounded-lg bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-900 flex items-center justify-center border border-amber-300 shrink-0 shadow-sm"
+                 title="按住此處上下拖拉排序">
+              <i class="fa-solid fa-grip-vertical text-xs pointer-events-none"></i>
+            </div>
+
+            <!-- 中間學校名稱 (font-weight: 900 超粗體放大，最多兩行不切字) -->
+            <div onclick="openSchoolModal('${school.id}')" class="flex-1 min-w-0 px-0.5 cursor-pointer">
+              <div class="${fontCfg.schoolText} text-slate-900 font-black school-title-clamp tracking-tight">
+                ${escapeHtml(school.name)}
+              </div>
+            </div>
+
+            <!-- 右側精巧編輯/刪除按鈕 -->
+            <button onclick="openSchoolModal('${school.id}')" class="w-6 h-7 rounded text-slate-400 hover:text-amber-700 hover:bg-amber-50 flex items-center justify-center shrink-0" title="編輯或刪除學校">
+              <i class="fa-solid fa-pen-to-square text-xs"></i>
+            </button>
+          </div>
+        `;
+        tr.appendChild(tdSchool);
+
+        // 2. 右側 1月 ~ 12月 收費格子 (每格寬 22.22vw，手機畫面剛好同時顯示 3 個月份)
+        for (let m = 1; m <= 12; m++) {
+          const td = document.createElement('td');
+          td.className = 'col-month p-1 border-r border-b border-slate-200 align-middle bg-white';
+
+          const record = state.payments[school.id] && state.payments[school.id][m];
+          const isPaid = Boolean(record && record.paid);
+          const amount = (record && record.amount) ? Number(record.amount) : 0;
+
+          if (isPaid) {
+            schoolYearSum += amount;
+            monthlyTotals[m] += amount;
+            grandTotal += amount;
+            paidCount++;
+          }
+
+          const btn = document.createElement('div');
+          btn.onclick = () => openCellModal(school.id, school.name, m);
+
+          if (isPaid) {
+            // 完成收費：醒目翡翠綠樣式
+            btn.className = `pay-btn cursor-pointer w-full ${fontCfg.btnH} rounded-xl bg-emerald-500 hover:bg-emerald-600 border-2 border-emerald-700 text-white shadow-sm flex flex-col items-center justify-center px-0.5`;
+            if (state.displayMode === 'amount') {
+              btn.innerHTML = `
+                <span class="${fontCfg.cellText} font-black leading-none tracking-tight text-white">
+                  ${amount > 0 ? '$' + amount.toLocaleString() : '⭕'}
+                </span>
+                <span class="text-[10px] text-emerald-100 font-bold mt-0.5 leading-none">完成</span>
+              `;
+            } else {
+              btn.innerHTML = `
+                <div class="w-5 h-5 sm:w-6 sm:h-6 rounded-full border-[2.5px] border-white flex items-center justify-center">
+                  <i class="fa-solid fa-check text-[10px] text-white"></i>
+                </div>
+                <span class="text-[10px] text-emerald-50 font-black mt-0.5 leading-none">
+                  ${amount > 0 ? '$' + amount.toLocaleString() : '已收'}
+                </span>
+              `;
+            }
+          } else {
+            // 預設空白格
+            btn.className = `pay-btn cursor-pointer w-full ${fontCfg.btnH} rounded-xl bg-slate-50 hover:bg-amber-50 border border-dashed border-slate-300 text-slate-300 flex items-center justify-center`;
+            btn.innerHTML = `<span class="text-xs font-bold">+</span>`;
+          }
+
+          td.appendChild(btn);
+          tr.appendChild(td);
+        }
+
+        // 3. 最右側：該校年度總計
+        const tdTotal = document.createElement('td');
+        tdTotal.className = `col-year-total px-1 border-b border-slate-200 border-l-2 border-l-amber-400 bg-amber-50/70 font-black text-amber-950 align-middle ${fontCfg.cellText}`;
+        tdTotal.textContent = schoolYearSum > 0 ? '$' + schoolYearSum.toLocaleString() : '$0';
+        tr.appendChild(tdTotal);
+
+        tbody.appendChild(tr);
+      });
+
+      // 更新底部 1~12 月總計與全年度總額
+      for (let m = 1; m <= 12; m++) {
+        const fCell = document.getElementById(`footMonth-${m}`);
+        if (fCell) {
+          fCell.textContent = monthlyTotals[m] > 0 ? '$' + monthlyTotals[m].toLocaleString() : '$0';
+        }
+      }
+      document.getElementById('footGrandTotal').textContent = '$' + grandTotal.toLocaleString();
+
+      // 更新頂部徽章
+      document.getElementById('hdrSchoolCount').textContent = state.schools.length;
+      document.getElementById('hdrPaidCount').textContent = paidCount;
+      document.getElementById('hdrGrandTotal').textContent = '$' + grandTotal.toLocaleString();
+    }
+
+    /* ---------------- 工具列切換：符號/金額 & 字體四段縮放 ---------------- */
+    function toggleDisplayMode() {
+      state.displayMode = state.displayMode === 'symbol' ? 'amount' : 'symbol';
+      saveState();
+      updateToolbarButtons();
+      renderTable();
+      showToast(state.displayMode === 'amount' ? '已切換：顯示收費金額 💰' : '已切換：顯示完成圓圈符號 ⭕');
+    }
+
+    function cycleFontSize() {
+      state.fontIndex = (state.fontIndex + 1) % FONT_CONFIGS.length;
+      saveState();
+      updateToolbarButtons();
+      renderTable();
+      showToast(`字體已切換為：${FONT_CONFIGS[state.fontIndex].label}`);
+    }
+
+    function updateToolbarButtons() {
+      const modeBtnLabel = document.getElementById('modeBtnLabel');
+      const modeIcon = document.getElementById('modeIcon');
+      if (state.displayMode === 'amount') {
+        modeBtnLabel.textContent = '切換:💰金額';
+        modeIcon.className = 'fa-solid fa-dollar-sign text-amber-600';
+      } else {
+        modeBtnLabel.textContent = '切換:⭕符號';
+        modeIcon.className = 'fa-solid fa-circle-check text-emerald-600';
+      }
+
+      const fontBtnLabel = document.getElementById('fontBtnLabel');
+      if (fontBtnLabel) {
+        fontBtnLabel.textContent = `字體:${FONT_CONFIGS[state.fontIndex].label}`;
+      }
+    }
+
+    /* ---------------- 收費儲存格互動邏輯 ---------------- */
+    function openCellModal(schoolId, schoolName, month) {
+      activeCell = { schoolId, schoolName, month };
+      document.getElementById('cellModalTitle').textContent = `${schoolName} — ${month}月份`;
+
+      const record = state.payments[schoolId] && state.payments[schoolId][month];
+      const isPaid = Boolean(record && record.paid);
+      const banner = document.getElementById('cellStatusBanner');
+      const btnText = document.getElementById('btnSelectCircleText');
+      const inp = document.getElementById('cellAmountInput');
+
+      document.getElementById('cellStep1').classList.remove('hidden');
+      document.getElementById('cellStep2').classList.add('hidden');
+
+      if (isPaid) {
+        const amtStr = record.amount ? '$' + Number(record.amount).toLocaleString() : '$0 (僅圓圈)';
+        banner.className = 'text-xs font-black p-2.5 rounded-xl mb-3 border bg-emerald-50 border-emerald-200 text-emerald-900';
+        banner.innerHTML = `<i class="fa-solid fa-circle-check text-emerald-600 mr-1"></i>目前狀態：已完成收費（${amtStr}）`;
+        btnText.textContent = '⭕ 修改當月收費金額';
+        inp.value = record.amount || '';
+      } else {
+        banner.className = 'text-xs font-bold p-2.5 rounded-xl mb-3 border bg-slate-50 border-slate-200 text-slate-600';
+        banner.innerHTML = `<i class="fa-regular fa-circle mr-1"></i>目前狀態：預設空白格（尚未收費）`;
+        btnText.textContent = '⭕ 完成收費（輸入金額）';
+        inp.value = '';
+      }
+
+      document.getElementById('cellModal').classList.remove('hidden');
+    }
+
+    function goToAmountStep() {
+      document.getElementById('cellStep1').classList.add('hidden');
+      document.getElementById('cellStep2').classList.remove('hidden');
+      setTimeout(() => {
+        const inp = document.getElementById('cellAmountInput');
+        inp.focus();
+        inp.select();
+      }, 50);
+    }
+
+    function fillQuickAmount(val) {
+      const inp = document.getElementById('cellAmountInput');
+      inp.value = val;
+      inp.focus();
+    }
+
+    function saveCellPayment(withAmount) {
+      const { schoolId, schoolName, month } = activeCell;
+      if (!schoolId || !month) return;
+
+      let amt = 0;
+      if (withAmount) {
+        const raw = document.getElementById('cellAmountInput').value.trim();
+        amt = raw ? Math.max(0, parseFloat(raw)) : 0;
+      }
+
+      if (!state.payments[schoolId]) state.payments[schoolId] = {};
+      state.payments[schoolId][month] = {
+        paid: true,
+        amount: isNaN(amt) ? 0 : amt
+      };
+
+      saveState();
+      renderTable();
+      closeModal('cellModal');
+      showToast(`${schoolName} ${month}月 完成收費 ($${(amt || 0).toLocaleString()})`);
+    }
+
+    function promptCancelSingleCell() {
+      const { schoolId, schoolName, month } = activeCell;
+      if (!schoolId || !month) return;
+
+      const record = state.payments[schoolId] && state.payments[schoolId][month];
+      if (!record || !record.paid) {
+        closeModal('cellModal');
+        showToast('目前已經是空白格');
+        return;
+      }
+
+      openConfirmDialog({
+        title: '確認取消收費？',
+        message: `確定要取消「${schoolName} - ${month}月」的收費紀錄並恢復預設空白格嗎？`,
+        onYes: () => {
+          delete state.payments[schoolId][month];
+          saveState();
+          renderTable();
+          closeModal('cellModal');
+          showToast(`已恢復「${schoolName} ${month}月」為空白格`);
+        }
+      });
+    }
+
+    /* ---------------- 學校新增 / 修改 / 刪除 ---------------- */
+    function openSchoolModal(schoolId = null) {
+      editingSchoolId = schoolId;
+      const heading = document.getElementById('schoolModalHeading');
+      const input = document.getElementById('schoolNameInput');
+      const delBtn = document.getElementById('deleteSchoolInModalBtn');
+
+      if (schoolId) {
+        const target = state.schools.find(s => s.id === schoolId);
+        heading.innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-600"></i><span>編輯或刪除學校</span>`;
+        input.value = target ? target.name : '';
+        delBtn.classList.remove('hidden');
+      } else {
+        heading.innerHTML = `<i class="fa-solid fa-school text-amber-600"></i><span>新增學校</span>`;
+        input.value = '';
+        delBtn.classList.add('hidden');
+      }
+
+      document.getElementById('schoolModal').classList.remove('hidden');
+      setTimeout(() => input.focus(), 50);
+    }
+
+    function saveSchoolItem() {
+      const input = document.getElementById('schoolNameInput');
+      const name = input.value.trim();
+      if (!name) {
+        showToast('請輸入學校名稱！');
+        return;
+      }
+
+      if (editingSchoolId) {
+        const target = state.schools.find(s => s.id === editingSchoolId);
+        if (target) target.name = name;
+        showToast(`已更新校名：${name}`);
+      } else {
+        state.schools.push({ id: 'sch_' + Date.now(), name });
+        showToast(`已新增學校：${name}`);
+      }
+
+      editingSchoolId = null;
+      saveState();
+      renderTable();
+      closeModal('schoolModal');
+    }
+
+    function promptDeleteCurrentSchool() {
+      if (!editingSchoolId) return;
+      const target = state.schools.find(s => s.id === editingSchoolId);
+      if (!target) return;
+
+      const targetId = editingSchoolId;
+      closeModal('schoolModal');
+
+      openConfirmDialog({
+        title: '確認刪除學校？',
+        message: `確定要刪除「${target.name}」以及該校所有的收費紀錄嗎？`,
+        onYes: () => {
+          state.schools = state.schools.filter(s => s.id !== targetId);
+          delete state.payments[targetId];
+          editingSchoolId = null;
+          saveState();
+          renderTable();
+          showToast(`已刪除學校：${target.name}`);
+        }
+      });
+    }
+
+    /* ---------------- 學校名單文字檔 (.txt) 匯出 / 匯入 ---------------- */
+    function getSchoolsPlainText() {
+      return state.schools.map(s => s.name).join('\n');
+    }
+
+    function openSchoolTxtModal() {
+      const countEl = document.getElementById('txtModalSchoolCount');
+      if (countEl) countEl.textContent = state.schools.length;
+
+      const ta = document.getElementById('schoolTxtTextarea');
+      if (ta) ta.value = getSchoolsPlainText();
+
+      const fileInp = document.getElementById('schoolTxtFileInput');
+      if (fileInp) fileInp.value = '';
+
+      document.getElementById('schoolTxtModal').classList.remove('hidden');
+    }
+
+    function getSchoolTxtFileName() {
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      return `維尼團班_學校名單_${stamp}.txt`;
+    }
+
+    /* 匯出方法 1：直接下載 .txt 檔案（含 UTF-8 BOM 防止 Windows 記事本亂碼） */
+    function exportSchoolsTxtFile() {
+      const textContent = getSchoolsPlainText();
+      if (!textContent) {
+        showToast('目前沒有學校可供匯出！');
+        return;
+      }
+      const blob = new Blob(['\uFEFF' + textContent], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.style.display = 'none';
+      a.href = url;
+      a.download = getSchoolTxtFileName();
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (a.parentNode) document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 400);
+      showToast('已匯出下載學校名單 (.txt)！');
+    }
+
+    /* 匯出方法 2：手機原生分享 .txt 文字檔（可存入檔案 App 或傳送至 LINE） */
+    async function shareSchoolsTxtMobile() {
+      const textContent = getSchoolsPlainText();
+      if (!textContent) {
+        showToast('目前沒有學校可供分享！');
+        return;
+      }
+      const fileName = getSchoolTxtFileName();
+      try {
+        const blob = new Blob(['\uFEFF' + textContent], { type: 'text/plain;charset=utf-8' });
+        const file = new File([blob], fileName, { type: 'text/plain' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: '維尼團班收費系統 — 學校名單文字檔',
+            text: textContent,
+            files: [file]
+          });
+          showToast('已開啟系統分享選單！');
+          return;
+        }
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+      exportSchoolsTxtFile();
+    }
+
+    /* 匯出方法 3：一鍵複製所有學校文字 */
+    function copySchoolsTxtToClipboard() {
+      const textContent = getSchoolsPlainText();
+      if (!textContent) {
+        showToast('目前沒有學校可複製！');
+        return;
+      }
+      if (copyTextFallback(textContent)) {
+        showToast(`✅ 已複製 ${state.schools.length} 間學校名單至剪貼簿！`);
+      } else {
+        showToast('請長按下方文字框手動全選複製');
+      }
+    }
+
+    /* 匯入：讀取使用者選取的 .txt 文字檔 */
+    function handleSchoolTxtFileSelect(event) {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const content = String(e.target.result || '').replace(/^\uFEFF/, '');
+        const ta = document.getElementById('schoolTxtTextarea');
+        if (ta) ta.value = content;
+        const parsed = parseSchoolNamesFromText(content);
+        showToast(`已載入檔案「${file.name}」（共解析出 ${parsed.length} 間學校），請選擇附加或覆蓋匯入！`);
+      };
+      reader.onerror = function () {
+        showToast('讀取文字檔失敗，請確認檔案為 .txt 純文字格式');
+      };
+      reader.readAsText(file, 'UTF-8');
+    }
+
+    /* 解析文字框中的學校名稱（支援換行、逗號、頓號分隔，並自動去除行首編號如 1. ） */
+    function parseSchoolNamesFromText(rawText) {
+      if (!rawText) return [];
+      const lines = rawText
+        .split(/[\r\n,，、;；]+/)
+        .map(line => line.replace(/^\s*\d+[\.\、\)\s]+/, '').trim())
+        .filter(Boolean);
+      // 去除重複名稱並保持順序
+      return Array.from(new Set(lines));
+    }
+
+    /* 執行匯入學校（mode: 'append' 附加 | 'replace' 覆蓋） */
+    function applySchoolsFromTextarea(mode) {
+      const ta = document.getElementById('schoolTxtTextarea');
+      const rawText = ta ? ta.value : '';
+      const names = parseSchoolNamesFromText(rawText);
+
+      if (names.length === 0) {
+        showToast('請先選取 .txt 檔案或輸入至少一間學校名稱！');
+        return;
+      }
+
+      if (mode === 'append') {
+        const existingNames = new Set(state.schools.map(s => s.name));
+        let addedCount = 0;
+        names.forEach((name, idx) => {
+          if (!existingNames.has(name)) {
+            state.schools.push({
+              id: 'sch_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
+              name
+            });
+            existingNames.add(name);
+            addedCount++;
+          }
+        });
+        saveState();
+        renderTable();
+        closeModal('schoolTxtModal');
+        showToast(addedCount > 0 ? `✅ 已成功附加新增 ${addedCount} 間學校！` : '名單中的學校皆已存在，無新增項目');
+      } else if (mode === 'replace') {
+        openConfirmDialog({
+          title: '確認覆蓋現有學校名單？',
+          message: `即將以匯入的 ${names.length} 間學校覆蓋目前名單（同名學校將自動保留原有的 1~12 月收費紀錄）。\n是否確認覆蓋？`,
+          onYes: () => {
+            const oldNameMap = new Map();
+            state.schools.forEach(s => {
+              if (!oldNameMap.has(s.name)) {
+                oldNameMap.set(s.name, s);
+              }
+            });
+
+            const newSchools = [];
+            const keepIds = new Set();
+
+            names.forEach((name, idx) => {
+              if (oldNameMap.has(name)) {
+                const existingSchool = oldNameMap.get(name);
+                newSchools.push({ id: existingSchool.id, name: existingSchool.name });
+                keepIds.add(existingSchool.id);
+              } else {
+                const newId = 'sch_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000);
+                newSchools.push({ id: newId, name });
+                keepIds.add(newId);
+              }
+            });
+
+            // 清理已不在名單內學校的收費紀錄
+            Object.keys(state.payments).forEach(schId => {
+              if (!keepIds.has(schId)) {
+                delete state.payments[schId];
+              }
+            });
+
+            state.schools = newSchools;
+            saveState();
+            renderTable();
+            closeModal('schoolTxtModal');
+            showToast(`✅ 已成功匯入並更新為 ${newSchools.length} 間學校！`);
+          }
+        });
+      }
+    }
+
+    /* 一鍵載入預設 19 間學校名單 */
+    function resetToDefaultSchools() {
+      const ta = document.getElementById('schoolTxtTextarea');
+      if (ta) {
+        ta.value = DEFAULT_SCHOOLS.map(s => s.name).join('\n');
+      }
+      applySchoolsFromTextarea('replace');
+    }
+
+    /* ---------------- 一鍵清除所有空格 ---------------- */
+    function promptClearAllCells() {
+      openConfirmDialog({
+        title: '一鍵清除所有空格',
+        message: '確定要清除所有學校 1~12 月的完成符號與收費金額嗎？（是 / 否）\n確認後將恢復為預設空白格，並可繼續點選。',
+        onYes: () => {
+          state.payments = {};
+          saveState();
+          renderTable();
+          showToast('已清除所有符號及金額！');
+        }
+      });
+    }
+
+    /* ---------------- 原生 HTML5 Canvas 繪製標準 A4 收費總表圖片 ---------------- */
+    function generateA4ReportDataURL() {
+      const canvas = document.createElement('canvas');
+      const W = 1240;
+      const schoolCount = Math.max(1, state.schools.length);
+
+      const padX = 48;
+      const padY = 50;
+      const headerH = 130;
+      const tableHeaderH = 54;
+      const rowH = Math.max(52, Math.min(70, Math.floor(1100 / (schoolCount + 2))));
+      const footerH = 60;
+      const signH = 90;
+
+      const neededH = padY * 2 + headerH + tableHeaderH + (schoolCount * rowH) + footerH + signH;
+      const H = Math.max(1754, neededH);
+
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+
+      // 白底
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+
+      // 統計數據
+      const monthlySums = new Array(13).fill(0);
+      let grandTotal = 0;
+      let totalPaidCount = 0;
+      state.schools.forEach(s => {
+        for (let m = 1; m <= 12; m++) {
+          const rec = state.payments[s.id] && state.payments[s.id][m];
+          if (rec && rec.paid) {
+            const a = Number(rec.amount) || 0;
+            monthlySums[m] += a;
+            grandTotal += a;
+            totalPaidCount++;
+          }
+        }
+      });
+
+      // 頂部標題
+      ctx.fillStyle = '#d97706';
+      ctx.fillRect(padX, padY, 136, 26);
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 14px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('A4 正式收費總表', padX + 68, padY + 13);
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '900 32px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('維尼全腦團班收費系統1.0 — 年度收費總表', padX, padY + 58);
+
+      ctx.fillStyle = '#475569';
+      ctx.font = '700 16px "Noto Sans TC", sans-serif';
+      ctx.fillText('包含所有學校名稱、1~12月個別收費金額、每校年度總計與全年度總金額', padX, padY + 94);
+
+      // 右上摘要框
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const boxW = 300;
+      const boxH = 92;
+      const boxX = W - padX - boxW;
+      const boxY = padY + 6;
+
+      ctx.fillStyle = '#fffbeb';
+      ctx.fillRect(boxX, boxY, boxW, boxH);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(boxX, boxY, boxW, boxH);
+
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#334155';
+      ctx.font = '700 14px "Noto Sans TC", sans-serif';
+      ctx.fillText(`匯出日期：${dateStr}`, boxX + boxW - 12, boxY + 22);
+      ctx.fillText(`學校數：${state.schools.length} 所 ／ 完成：${totalPaidCount} 筆`, boxX + boxW - 12, boxY + 46);
+      ctx.fillStyle = '#be123c';
+      ctx.font = '900 18px "Noto Sans TC", sans-serif';
+      ctx.fillText(`全年度總額：NT$ ${grandTotal.toLocaleString()}`, boxX + boxW - 12, boxY + 74);
+
+      // 分隔線
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 3.5;
+      ctx.beginPath();
+      ctx.moveTo(padX, padY + headerH - 12);
+      ctx.lineTo(W - padX, padY + headerH - 12);
+      ctx.stroke();
+
+      // 表格欄位設定
+      const tableTop = padY + headerH;
+      const tableW = W - padX * 2;
+      const colIdxW = 42;
+      const colSchoolW = 224;
+      const colTotalW = 114;
+      const colMonthW = (tableW - colIdxW - colSchoolW - colTotalW) / 12;
+
+      const getColX = (c) => {
+        if (c === 0) return padX;
+        if (c === 1) return padX + colIdxW;
+        if (c >= 2 && c <= 13) return padX + colIdxW + colSchoolW + (c - 2) * colMonthW;
+        return padX + colIdxW + colSchoolW + 12 * colMonthW;
+      };
+      const getColW = (c) => {
+        if (c === 0) return colIdxW;
+        if (c === 1) return colSchoolW;
+        if (c >= 2 && c <= 13) return colMonthW;
+        return colTotalW;
+      };
+
+      // 表頭列
+      ctx.fillStyle = '#fde68a';
+      ctx.fillRect(padX, tableTop, tableW, tableHeaderH);
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillRect(getColX(14), tableTop, colTotalW, tableHeaderH);
+
+      const headers = ['#', '學校名稱', '1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月', '年度總計'];
+      for (let c = 0; c < 15; c++) {
+        const cx = getColX(c);
+        const cw = getColW(c);
+        ctx.strokeStyle = '#334155';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(cx, tableTop, cw, tableHeaderH);
+
+        ctx.fillStyle = '#0f172a';
+        ctx.font = (c >= 2 && c <= 13) ? '900 16px "Noto Sans TC", sans-serif' : '900 18px "Noto Sans TC", sans-serif';
+        ctx.textAlign = c === 1 ? 'left' : 'center';
+        ctx.fillText(headers[c], c === 1 ? cx + 10 : cx + cw / 2, tableTop + tableHeaderH / 2);
+      }
+
+      // 各校資料列
+      let curY = tableTop + tableHeaderH;
+      state.schools.forEach((school, idx) => {
+        ctx.fillStyle = idx % 2 === 0 ? '#ffffff' : '#fffbeb';
+        ctx.fillRect(padX, curY, tableW, rowH);
+
+        ctx.fillStyle = '#475569';
+        ctx.font = '700 14px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(String(idx + 1), getColX(0) + colIdxW / 2, curY + rowH / 2);
+
+        // 學校名稱
+        ctx.fillStyle = '#0f172a';
+        ctx.font = '900 18px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'left';
+        let sName = school.name;
+        while (ctx.measureText(sName).width > colSchoolW - 16 && sName.length > 2) {
+          sName = sName.slice(0, -1);
+        }
+        if (sName !== school.name) sName += '…';
+        ctx.fillText(sName, getColX(1) + 10, curY + rowH / 2);
+
+        let schoolSum = 0;
+        for (let m = 1; m <= 12; m++) {
+          const c = m + 1;
+          const cx = getColX(c);
+          const cw = getColW(c);
+          const rec = state.payments[school.id] && state.payments[school.id][m];
+          const isPaid = Boolean(rec && rec.paid);
+          const amt = (rec && rec.amount) ? Number(rec.amount) : 0;
+
+          if (isPaid) {
+            schoolSum += amt;
+            ctx.fillStyle = '#d1fae5';
+            ctx.fillRect(cx + 1, curY + 1, cw - 2, rowH - 2);
+
+            ctx.fillStyle = '#065f46';
+            ctx.font = '900 13px "Noto Sans TC", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(amt > 0 ? '$' + amt.toLocaleString() : '⭕完成', cx + cw / 2, curY + rowH / 2 - 6);
+
+            ctx.fillStyle = '#059669';
+            ctx.font = '700 10px "Noto Sans TC", sans-serif';
+            ctx.fillText('● 已收費', cx + cw / 2, curY + rowH / 2 + 10);
+          } else {
+            ctx.fillStyle = '#cbd5e1';
+            ctx.font = '700 14px "Noto Sans TC", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('-', cx + cw / 2, curY + rowH / 2);
+          }
+        }
+
+        // 年度總計
+        const tx = getColX(14);
+        ctx.fillStyle = '#fef3c7';
+        ctx.fillRect(tx, curY, colTotalW, rowH);
+        ctx.fillStyle = '#92400e';
+        ctx.font = '900 15px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('$' + schoolSum.toLocaleString(), tx + colTotalW / 2, curY + rowH / 2);
+
+        for (let c = 0; c < 15; c++) {
+          ctx.strokeStyle = '#64748b';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(getColX(c), curY, getColW(c), rowH);
+        }
+
+        curY += rowH;
+      });
+
+      // 底部各月總計列
+      ctx.fillStyle = '#fde68a';
+      ctx.fillRect(padX, curY, tableW, footerH);
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(padX, curY, colIdxW + colSchoolW, footerH);
+
+      ctx.fillStyle = '#0f172a';
+      ctx.font = '900 18px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('各月收費總計', padX + 12, curY + footerH / 2);
+
+      for (let m = 1; m <= 12; m++) {
+        const c = m + 1;
+        const cx = getColX(c);
+        const cw = getColW(c);
+        ctx.strokeRect(cx, curY, cw, footerH);
+        ctx.fillStyle = '#065f46';
+        ctx.font = '900 13px "Noto Sans TC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(monthlySums[m] > 0 ? '$' + monthlySums[m].toLocaleString() : '$0', cx + cw / 2, curY + footerH / 2);
+      }
+
+      const gx = getColX(14);
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillRect(gx, curY, colTotalW, footerH);
+      ctx.strokeRect(gx, curY, colTotalW, footerH);
+      ctx.fillStyle = '#be123c';
+      ctx.font = '900 16px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('$' + grandTotal.toLocaleString(), gx + colTotalW / 2, curY + footerH / 2);
+
+      ctx.strokeStyle = '#0f172a';
+      ctx.lineWidth = 2.5;
+      ctx.strokeRect(padX, tableTop, tableW, (curY + footerH) - tableTop);
+
+      // 簽核欄
+      const signY = curY + footerH + 45;
+      ctx.fillStyle = '#475569';
+      ctx.font = '700 15px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('系統製表：維尼全腦團班收費系統1.0', padX, signY);
+      ctx.textAlign = 'right';
+      ctx.fillText('經辦人簽章：____________________　　主管核章：____________________', W - padX, signY);
+
+      return canvas;
+    }
+
+    /* 將 Canvas 同步轉為 DataURL 與二進位 Blob，確保所有瀏覽器/手機皆可存檔 */
+    function prepareA4ExportAssets(callback) {
+      const canvas = generateA4ReportDataURL();
+      cachedA4DataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+      document.getElementById('a4PreviewImage').src = cachedA4DataUrl;
+      document.getElementById('printOnlyImage').src = cachedA4DataUrl;
+      const fsImg = document.getElementById('fullScreenSaveImg');
+      if (fsImg) fsImg.src = cachedA4DataUrl;
+      const previewLink = document.getElementById('a4PreviewLink');
+      if (previewLink) previewLink.href = cachedA4DataUrl;
+
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            cachedA4Blob = blob;
+            if (cachedA4BlobUrl) URL.revokeObjectURL(cachedA4BlobUrl);
+            cachedA4BlobUrl = URL.createObjectURL(blob);
+            // 優先將圖片 src 指向 Blob URL，讓 iOS/Android 瀏覽器將其視為真實檔案以支援長按存圖
+            document.getElementById('a4PreviewImage').src = cachedA4BlobUrl;
+            if (fsImg) fsImg.src = cachedA4BlobUrl;
+            if (previewLink) previewLink.href = cachedA4BlobUrl;
+          }
+          if (typeof callback === 'function') callback();
+        }, 'image/jpeg', 0.95);
+      } else {
+        cachedA4Blob = dataURLToBlob(cachedA4DataUrl);
+        if (cachedA4BlobUrl) URL.revokeObjectURL(cachedA4BlobUrl);
+        cachedA4BlobUrl = URL.createObjectURL(cachedA4Blob);
+        document.getElementById('a4PreviewImage').src = cachedA4BlobUrl;
+        if (fsImg) fsImg.src = cachedA4BlobUrl;
+        if (previewLink) previewLink.href = cachedA4BlobUrl;
+        if (typeof callback === 'function') callback();
+      }
+    }
+
+    /* 產生排版精美的 LINE 收費總表文字（突破所有 WebView 圖片阻擋限制，100% 可傳入 LINE） */
+    function buildLineTextReport() {
+      const now = new Date();
+      const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+      let lines = [];
+      lines.push(`🐻【維尼全腦團班收費系統1.0】`);
+      lines.push(`📅 製表日期：${dateStr}`);
+      lines.push(`━━━━━━━━━━━━━━`);
+
+      let grandTotal = 0;
+      let totalPaidCount = 0;
+      const monthlySums = new Array(13).fill(0);
+
+      state.schools.forEach((school, idx) => {
+        let paidMonths = [];
+        let schoolSum = 0;
+        for (let m = 1; m <= 12; m++) {
+          const rec = state.payments[school.id] && state.payments[school.id][m];
+          if (rec && rec.paid) {
+            const amt = Number(rec.amount) || 0;
+            schoolSum += amt;
+            monthlySums[m] += amt;
+            grandTotal += amt;
+            totalPaidCount++;
+            paidMonths.push(`${m}月:$${amt.toLocaleString()}`);
+          }
+        }
+        lines.push(`${idx + 1}. 🏫 ${school.name}｜年度小計: $${schoolSum.toLocaleString()}`);
+        if (paidMonths.length > 0) {
+          lines.push(`   ⭕ 已收：${paidMonths.join('、')}`);
+        } else {
+          lines.push(`   ⚪ 尚無收費紀錄`);
+        }
+      });
+
+      lines.push(`━━━━━━━━━━━━━━`);
+      let activeMonths = [];
+      for (let m = 1; m <= 12; m++) {
+        if (monthlySums[m] > 0) {
+          activeMonths.push(`${m}月:$${monthlySums[m].toLocaleString()}`);
+        }
+      }
+      if (activeMonths.length > 0) {
+        lines.push(`📊 各月總計：${activeMonths.join('｜')}`);
+      }
+      lines.push(`💰 全年度總金額：NT$ ${grandTotal.toLocaleString()}（共 ${totalPaidCount} 筆完成）`);
+      return lines.join('\n');
+    }
+
+    /* 新增功能 A：一鍵直傳 LINE 聊天室（支援圖片分享與 LINE URL Scheme 雙重連動） */
+    async function shareReportToLineApp() {
+      const reportText = buildLineTextReport();
+
+      // 1. 先自動複製一份完整總表到剪貼簿，確保使用者進 LINE 也可隨時貼上
+      copyTextFallback(reportText);
+
+      // 2. 若手機支援原生檔案分享，優先喚起系統分享選單（可直接選 LINE 傳送高清圖片+文字）
+      try {
+        if (navigator.canShare && cachedA4Blob) {
+          const file = new File([cachedA4Blob], getExportFileName(), { type: 'image/jpeg' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: '維尼團班收費總表',
+              text: reportText,
+              files: [file]
+            });
+            showToast('已喚起 LINE / 系統分享選單！');
+            return;
+          }
+        }
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+
+      // 3. 若內嵌環境阻擋 navigator.share，直接透過 LINE 官方 Deep Link 喚起手機 LINE App 並帶入完整收費總表
+      const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(reportText)}`;
+      const a = document.createElement('a');
+      a.href = lineUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        if (a.parentNode) document.body.removeChild(a);
+      }, 300);
+
+      showToast('正在開啟 LINE 聊天室！（總表亦已自動複製，可直接貼上）');
+    }
+
+    /* 新增功能 B：複製圖片或總表文字直接貼上 LINE */
+    async function copyReportImageOrText() {
+      const reportText = buildLineTextReport();
+
+      // 嘗試將高清報表圖片寫入系統剪貼簿（支援在 LINE 對話框直接長按「貼上圖片」）
+      try {
+        if (navigator.clipboard && window.ClipboardItem) {
+          const canvas = generateA4ReportDataURL();
+          const pngBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          if (pngBlob) {
+            await navigator.clipboard.write([new ClipboardItem({ 'image/png': pngBlob })]);
+            showToast('✅ 已複製報表圖片！請打開 LINE 聊天室直接「貼上」');
+            return;
+          }
+        }
+      } catch (e) {
+        // 若沙盒阻擋圖片剪貼簿，立即無縫切換為複製排版總表文字
+      }
+
+      const ok = copyTextFallback(reportText);
+      if (ok) {
+        showToast('✅ 已複製完整收費總表！請打開 LINE 直接「貼上」傳送');
+      } else {
+        showToast('請點選「直傳 LINE 聊天室」或「滿版截圖頁」');
+      }
+    }
+
+    function copyTextFallback(text) {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.top = '-9999px';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const success = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return success;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function toggleCleanScreenshotMode(hideBar) {
+      const topBar = document.getElementById('fsTopBar');
+      const backBtn = document.getElementById('fsFloatingBackBtn');
+      if (hideBar) {
+        topBar.classList.add('hidden');
+        backBtn.classList.remove('hidden');
+        showToast('已隱藏頂部工具列，現在可直接用手機截圖！');
+      } else {
+        topBar.classList.remove('hidden');
+        backBtn.classList.add('hidden');
+      }
+    }
+
+    function dataURLToBlob(dataUrl) {
+      const parts = dataUrl.split(',');
+      const mime = parts[0].match(/:(.*?);/)[1];
+      const bstr = atob(parts[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      return new Blob([u8arr], { type: mime });
+    }
+
+    function getExportFileName() {
+      const now = new Date();
+      const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+      return `維尼團班收費總表_A4_${stamp}.jpg`;
+    }
+
+    function openSavePreviewModal() {
+      prepareA4ExportAssets(() => {
+        document.getElementById('savePreviewModal').classList.remove('hidden');
+      });
+    }
+
+    /* 方法 1：手機原生系統分享/存入相簿 (Web Share API Level 2) */
+    async function shareOrSaveImageMobile() {
+      if (!cachedA4Blob) {
+        prepareA4ExportAssets();
+      }
+      const fileName = getExportFileName();
+
+      try {
+        if (navigator.canShare && cachedA4Blob) {
+          const file = new File([cachedA4Blob], fileName, { type: 'image/jpeg' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: '維尼全腦團班收費系統1.0 — 年度收費總表',
+              text: '維尼全腦團班收費系統1.0 收費總表 (A4)',
+              files: [file]
+            });
+            showToast('已開啟系統存圖 / 分享選單！');
+            return;
+          }
+        }
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+      }
+
+      // 若環境不支援 navigator.share，自動執行 Blob 下載並開啟全螢幕長按存圖模式
+      triggerJpgDownload(true);
+      openFullScreenImageMode();
+      showToast('請直接長按畫面中的圖片選擇「儲存圖片」即可存入手機！');
+    }
+
+    /* 方法 2：使用二進位 Blob Object URL 高相容下載（突破 DataURL 長度與沙盒限制） */
+    function triggerJpgDownload(silentFallback = false) {
+      const fileName = getExportFileName();
+
+      const executeDownload = () => {
+        try {
+          const downloadUrl = cachedA4BlobUrl || cachedA4DataUrl;
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = downloadUrl;
+          a.download = fileName;
+          a.target = '_blank';
+          a.rel = 'noopener';
+          document.body.appendChild(a);
+          a.click();
+          setTimeout(() => {
+            if (a.parentNode) document.body.removeChild(a);
+          }, 300);
+
+          if (!silentFallback) {
+            showToast('已觸發下載！若受限於預覽器，請點「📸 滿版截圖頁」或「直傳 LINE」');
+          }
+        } catch (e) {
+          openFullScreenImageMode();
+          showToast('已切換為全螢幕模式，請長按圖片或直接手機截圖！');
+        }
+      };
+
+      if (!cachedA4BlobUrl) {
+        prepareA4ExportAssets(executeDownload);
+      } else {
+        executeDownload();
+      }
+    }
+
+    /* 方法 3：開啟全螢幕純圖片長按存檔與乾淨截圖模式 */
+    function openFullScreenImageMode() {
+      toggleCleanScreenshotMode(false);
+      if (!cachedA4DataUrl) {
+        prepareA4ExportAssets(() => {
+          document.getElementById('fullScreenImgModal').classList.remove('hidden');
+        });
+      } else {
+        document.getElementById('fullScreenSaveImg').src = cachedA4BlobUrl || cachedA4DataUrl;
+        document.getElementById('fullScreenImgModal').classList.remove('hidden');
+      }
+    }
+
+    /* 方法 4：A4 尺寸列印（依需求先跳出確認提示，確認後執行 A4 輸出） */
+    function promptA4PrintConfirm() {
+      openConfirmDialog({
+        title: '確認輸出 A4 尺寸列印？',
+        message: '即將以 A4 直式標準尺寸輸出「維尼團班收費總表」（包含所有學校、1~12月金額與總計）。\n是否確認列印或轉存 PDF？',
+        onYes: () => {
+          triggerA4Print();
+        }
+      });
+    }
+
+    function triggerA4Print() {
+      const doPrint = () => {
+        document.getElementById('printOnlyImage').src = cachedA4DataUrl;
+        showToast('正在啟動 A4 尺寸列印...');
+        setTimeout(() => {
+          window.print();
+        }, 250);
+      };
+
+      if (!cachedA4DataUrl) {
+        prepareA4ExportAssets(doPrint);
+      } else {
+        doPrint();
+      }
+    }
+
+    /* ---------------- 通用彈窗與通知工具 ---------------- */
+    function openConfirmDialog({ title, message, onYes }) {
+      document.getElementById('confirmTitleText').textContent = title || '確認提示';
+      document.getElementById('confirmBodyText').innerText = message || '確定要執行此操作嗎？';
+      confirmCallback = onYes;
+      document.getElementById('confirmDialog').classList.remove('hidden');
+    }
+
+    function handleConfirmAnswer(isYes) {
+      document.getElementById('confirmDialog').classList.add('hidden');
+      if (isYes && typeof confirmCallback === 'function') {
+        confirmCallback();
+      }
+      confirmCallback = null;
+    }
+
+    function closeModal(id) {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    }
+
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      const txt = document.getElementById('toastText');
+      if (!box || !txt) return;
+      txt.textContent = msg;
+      box.style.opacity = '1';
+      clearTimeout(window._winnieToastTimer);
+      window._winnieToastTimer = setTimeout(() => {
+        box.style.opacity = '0';
+      }, 2400);
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.innerText = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
